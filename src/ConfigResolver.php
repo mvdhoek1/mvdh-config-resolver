@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
+namespace MVDH\ConfigResolver;
+
 class ConfigResolver
 {
 	private array $config; // Array which holds all the data from the config file.
 	private mixed $setting = null; // Setting from the config file to use.
+	private string $settingPath = ''; // Dot-notated path of the selected setting.
 	private bool $hasSetting = false; // Whether a setting has been selected with useSetting().
 	private string $fieldToMatch = '';
 	private mixed $valueToMatch = null;
@@ -21,7 +24,7 @@ class ConfigResolver
 	 * Sets the specified setting to be used.
 	 * Resets any search parameters set by a previous searchBy() call.
 	 *
-	 * @throws InvalidArgumentException If the wanted setting is not configured.
+	 * @throws SettingNotFoundException If the wanted setting is not configured.
 	 */
 	public function useSetting(string $setting): self
 	{
@@ -30,17 +33,17 @@ class ConfigResolver
 
 		foreach ($settings as $key) {
 			if (! is_array($currentConfig) || ! array_key_exists($key, $currentConfig)) {
-				throw new InvalidArgumentException(sprintf(
-					'The requested setting "%s" is not configured. Available keys: %s',
+				throw SettingNotFoundException::forSetting(
 					$setting,
-					is_array($currentConfig) ? implode(', ', array_keys($currentConfig)) : '(none)'
-				));
+					is_array($currentConfig) ? array_map('strval', array_keys($currentConfig)) : []
+				);
 			}
 
 			$currentConfig = $currentConfig[$key];
 		}
 
 		$this->setting = $currentConfig;
+		$this->settingPath = $setting;
 		$this->hasSetting = true;
 		$this->fieldToMatch = '';
 		$this->valueToMatch = null;
@@ -75,19 +78,53 @@ class ConfigResolver
 	/**
 	 * Retrieves the value of the specified key inside an array.
 	 * If no setting or key is specified the entire configuration will be returned.
+	 * Returns null when nothing is found; use has() or getOrFail() to tell a missing key from a null value.
 	 */
 	public function get(string $field = ''): mixed
 	{
+		return $this->resolve($field)[1];
+	}
+
+	/**
+	 * Checks whether get() with the same arguments would find something.
+	 * Unlike get(), this distinguishes a missing key from a key whose value is null.
+	 */
+	public function has(string $field): bool
+	{
+		return $this->resolve($field)[0];
+	}
+
+	/**
+	 * Same as get(), but throws when nothing is found.
+	 *
+	 * @throws SettingNotFoundException If nothing is found.
+	 */
+	public function getOrFail(string $field): mixed
+	{
+		[$found, $value] = $this->resolve($field);
+
+		if (! $found) {
+			throw SettingNotFoundException::forField($field, $this->settingPath);
+		}
+
+		return $value;
+	}
+
+	/**
+	 * @return array{0: bool, 1: mixed} Whether something was found, and the found value.
+	 */
+	private function resolve(string $field): array
+	{
 		if (! $this->hasSetting) {
-			return $this->config;
+			return [true, $this->config];
 		}
 
 		if ('' === $field) {
-			return $this->setting;
+			return [true, $this->setting];
 		}
 
 		if (! is_array($this->setting)) {
-			return null;
+			return [false, null];
 		}
 
 		if ('' === $this->fieldToMatch || ! $this->hasValueToMatch) {
@@ -101,46 +138,71 @@ class ConfigResolver
 		return $this->handleOneDimensional($field);
 	}
 
-	protected function handleWithoutSearchParams(string $field): mixed
+	/**
+	 * @return array{0: bool, 1: mixed}
+	 */
+	protected function handleWithoutSearchParams(string $field): array
 	{
 		if ($this->returnKey) {
-			return $this->searchKey($field, $this->setting);
+			$key = array_search($field, $this->setting, true);
+
+			return false === $key ? [false, null] : [true, $key];
 		}
 
-		return $this->setting[$field] ?? null;
+		return $this->lookup($field, $this->setting);
 	}
 
-	protected function handleOneDimensional(string $field): mixed
+	/**
+	 * @return array{0: bool, 1: mixed}
+	 */
+	protected function handleOneDimensional(string $field): array
 	{
-		if (! array_key_exists($this->fieldToMatch, $this->setting) || $this->setting[$this->fieldToMatch] !== $this->valueToMatch) {
-			return null;
+		if (! $this->matches($this->setting)) {
+			return [false, null];
 		}
 
 		if ($this->returnKey) {
-			return $this->fieldToMatch;
+			return [true, $this->fieldToMatch];
 		}
 
-		return $this->setting[$field] ?? null;
+		return $this->lookup($field, $this->setting);
 	}
 
 	/**
 	 * Handles retrieving values for multi-dimensional arrays during search.
+	 *
+	 * @return array{0: bool, 1: mixed}
 	 */
-	protected function handleMultiDimensional(string $field): mixed
+	protected function handleMultiDimensional(string $field): array
 	{
-		foreach ($this->setting as $setting) {
-			if (! is_array($setting) || ! array_key_exists($this->fieldToMatch, $setting) || $setting[$this->fieldToMatch] !== $this->valueToMatch) {
+		foreach ($this->setting as $row) {
+			if (! $this->matches($row)) {
 				continue;
 			}
 
 			if ($this->returnKey) {
-				return $this->fieldToMatch;
+				return [true, $this->fieldToMatch];
 			}
 
-			return $setting[$field] ?? null;
+			return $this->lookup($field, $row);
 		}
 
-		return null;
+		return [false, null];
+	}
+
+	private function matches(mixed $row): bool
+	{
+		return is_array($row)
+			&& array_key_exists($this->fieldToMatch, $row)
+			&& $row[$this->fieldToMatch] === $this->valueToMatch;
+	}
+
+	/**
+	 * @return array{0: bool, 1: mixed}
+	 */
+	private function lookup(string $field, array $haystack): array
+	{
+		return array_key_exists($field, $haystack) ? [true, $haystack[$field]] : [false, null];
 	}
 
 	/**
@@ -159,15 +221,5 @@ class ConfigResolver
 		}
 
 		return true;
-	}
-
-	/**
-	 * Returns the key of the given value, or null when not found. Preserves falsy keys such as 0.
-	 */
-	private function searchKey(mixed $value, array $haystack): int|string|null
-	{
-		$key = array_search($value, $haystack, true);
-
-		return false === $key ? null : $key;
 	}
 }

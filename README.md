@@ -10,8 +10,17 @@ The `ConfigResolver` class is a utility designed to simplify the management and 
 - Dynamically set the configuration context.
 - Search by field or value in one-dimensional and multi-dimensional arrays.
 - Retrieve keys instead of values using the `returnKey` option.
+- Distinguish missing keys from `null` values with `has()`, or fail fast with `getOrFail()`.
 
 ---
+
+## Installation
+
+```bash
+composer require mvdh/config-resolver
+```
+
+Requires PHP 8.0 or higher.
 
 ## How to Use
 
@@ -20,6 +29,8 @@ The `ConfigResolver` class is a utility designed to simplify the management and 
 To start using the `ConfigResolver`, initialize it with a configuration array:
 
 ```php
+use MVDH\ConfigResolver\ConfigResolver;
+
 $configArray = [
     'person' => [
         'name' => 'Dave',
@@ -175,14 +186,62 @@ $configResolver->returnKey(false)->useSetting('settings.database');
 $dbUser = $configResolver->get('user'); // Returns 'root'
 ```
 
-## Error Handling
+## Checking for Missing Values
 
-The `ConfigResolver` class throws an `InvalidArgumentException` if a requested setting does not exist, including when a path tries to go deeper than a non-array value (e.g. `person.name.first`):
+`get()` and `searchBy()` return `null` when nothing is found. Because a key can also hold `null` as its value, use `has()` to tell the two apart, or `getOrFail()` to throw when nothing is found:
 
 ```php
+$configResolver = new ConfigResolver(['map' => ['empty' => null]]);
+$configResolver->useSetting('map');
+
+$configResolver->get('empty');       // null (the value is null)
+$configResolver->get('unknown');     // null (the key is missing)
+
+$configResolver->has('empty');       // true
+$configResolver->has('unknown');     // false
+
+$configResolver->getOrFail('empty');   // null
+$configResolver->getOrFail('unknown'); // throws SettingNotFoundException
+```
+
+`has()` and `getOrFail()` follow the same rules as `get()`: they respect `returnKey()` and an active `searchBy()` search.
+
+Use `get()` when a missing value is a normal case (e.g. an optional field mapping), and `getOrFail()` when a missing value means the configuration is wrong.
+
+## Error Handling
+
+`useSetting()` and `getOrFail()` throw a `MVDH\ConfigResolver\SettingNotFoundException` when something cannot be found. `useSetting()` also throws when a path tries to go deeper than a non-array value (e.g. `person.name.first`).
+
+`SettingNotFoundException` extends `InvalidArgumentException`, so you can catch either:
+
+```php
+use MVDH\ConfigResolver\SettingNotFoundException;
+
 try {
     $configResolver->useSetting('nonexistent.setting');
-} catch (InvalidArgumentException $e) {
+} catch (SettingNotFoundException $e) {
     echo $e->getMessage(); // Outputs: 'The requested setting "nonexistent.setting" is not configured. Available keys: settings'
 }
+
+try {
+    $configResolver->useSetting('settings.database')->getOrFail('port');
+} catch (SettingNotFoundException $e) {
+    echo $e->getMessage(); // Outputs: 'Nothing found for "port" in setting "settings.database".'
+}
+```
+
+## Testing
+
+The test suite uses [Pest](https://pestphp.com) and lives in `tests/Unit`.
+
+```bash
+composer install   # installs Pest as a dev dependency
+composer test      # runs the suite (same as ./vendor/bin/pest)
+```
+
+Useful options:
+
+```bash
+./vendor/bin/pest --filter=getOrFail   # run matching tests only
+./vendor/bin/pest --coverage           # coverage report (requires Xdebug or PCOV)
 ```
