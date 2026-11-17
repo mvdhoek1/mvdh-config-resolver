@@ -18,6 +18,8 @@ namespace MVDH\ConfigResolver;
  * Fluent resolver for reading, searching and reverse-looking-up values in a configuration array.
  *
  * @since 1.0.0
+ * @deprecated 1.2.0 Use the immutable {@see Config} instead; this class will be removed in 2.0.0.
+ *             See the "Migrating from ConfigResolver" section in the README.
  */
 class ConfigResolver
 {

@@ -5,19 +5,33 @@
 [![PHP Version](https://img.shields.io/packagist/dependency-v/mvdh/config-resolver/php.svg)](https://packagist.org/packages/mvdh/config-resolver)
 [![License](https://img.shields.io/packagist/l/mvdh/config-resolver.svg)](LICENSE)
 
-The `ConfigResolver` class is a utility designed to simplify the management and retrieval of configuration settings from a nested configuration array. It provides intuitive methods to set specific settings, search by fields or values, and retrieve values or keys.
+Read, search and reverse-look-up values in nested configuration arrays, with an immutable API that is safe to share.
 
----
+```php
+use MVDH\ConfigResolver\Config;
+
+$config = Config::from([
+    'field_mapping' => ['userId' => 'UID', 'email' => 'EmailAddress'],
+    'forms' => [
+        ['id' => 'contact', 'recipient' => 'info@example.com'],
+        ['id' => 'newsletter', 'recipient' => 'news@example.com'],
+    ],
+]);
+
+$config->get('field_mapping.userId');                              // 'UID'
+$config->in('field_mapping')->keyOf('EmailAddress');               // 'email'
+$config->in('forms')->find('id', 'newsletter')?->get('recipient'); // 'news@example.com'
+```
 
 ## Features
 
-- Retrieve values from nested configuration arrays.
-- Dynamically set the configuration context.
-- Search by field or value in one-dimensional and multi-dimensional arrays.
-- Retrieve keys instead of values using the `returnKey` option.
-- Distinguish missing keys from `null` values with `has()`, or fail fast with `getOrFail()`.
-
----
+- Read nested values with dot notation, with an optional default.
+- Scope to a part of the configuration with `in()`.
+- Reverse lookup: find the key of a value with `keyOf()`.
+- Find a row in a list of arrays with `find()` and `findOrFail()`.
+- Tell a missing key apart from a `null` value with `has()`, or fail fast with `getOrFail()`.
+- Immutable: every call returns a value or a new instance, so one call never affects another.
+- Strict (`===`) comparisons, clear exceptions, no runtime dependencies.
 
 ## Installation
 
@@ -25,219 +39,142 @@ The `ConfigResolver` class is a utility designed to simplify the management and 
 composer require mvdh/config-resolver
 ```
 
-Requires PHP 8.2 or higher. The package has no runtime dependencies.
+Requires PHP 8.2 or higher.
 
-## How to Use
+## Usage
 
-### Set-Up
-
-To start using the `ConfigResolver`, initialize it with a configuration array:
+### Creating a Config
 
 ```php
-use MVDH\ConfigResolver\ConfigResolver;
+use MVDH\ConfigResolver\Config;
 
-$configArray = [
+$config = Config::from([
     'person' => [
         'name' => 'Dave',
         'surname' => 'Rossi',
         'options' => [
-            [
-                'skill' => 'cute',
-                'since' => 'baby',
-            ],
-            [
-                'skill' => 'smart',
-                'since' => 'teenager',
-            ],
+            ['skill' => 'cute', 'since' => 'baby'],
+            ['skill' => 'smart', 'since' => 'teenager'],
         ],
     ],
-];
-
-$configResolver = new ConfigResolver($configArray);
+]);
 ```
 
-### Setting the Configuration Context
+### Reading Values
 
-Use `useSetting()` to specify which part of the configuration to work with. Nested keys are separated by dots:
+`get()` reads a key at the current level or a dot-notated path. Missing keys return `null`, or the default you pass:
 
 ```php
-$configResolver->useSetting('person');
+$config->get('person.name');              // 'Dave'
+$config->get('person.options.1.skill');   // 'smart'
+$config->get('person.age');               // null
+$config->get('person.age', 30);           // 30
 ```
 
-This sets the configuration context to the `person` key. Calling `useSetting()` also clears any search parameters set by a previous `searchBy()` call.
-
-Until `useSetting()` has been called, lookups run against the top level of the configuration: `get('person')` returns the `person` array and `get()` returns the entire configuration.
-
-Keys that contain a dot (e.g. `'app.name' => '...'`) cannot be selected with `useSetting()`, because the dot is always read as a separator. Select their parent and use `get('app.name')` instead.
-
-### Simple Retrieval
-
-Retrieve a value from the current context using `get()`. Unknown fields return `null`:
+A key that exists with the value `null` returns `null`, not the default. Use `has()` to tell the two apart, or `getOrFail()` to throw when a key is missing:
 
 ```php
-$configResolver->get('name'); // Returns 'Dave'
+$config->has('person.name');        // true
+$config->has('person.age');         // false
+$config->getOrFail('person.age');   // throws SettingNotFoundException
 ```
 
-If no field is specified, the entire context is returned:
+`all()` returns the whole array of the current level.
+
+### Keys That Contain a Dot
+
+An exact key at the current level always wins; only when it does not exist is the key read as a path:
 
 ```php
-$configResolver->get(); // Returns the array for 'person'
+$config = Config::from(['app.name' => 'flat', 'app' => ['name' => 'nested', 'version' => '1.0']]);
+
+$config->get('app.name');    // 'flat' (exact key)
+$config->get('app.version'); // '1.0'  (path)
 ```
 
-### Returning Keys Instead of Values
+### Scoping with `in()`
 
-Use `returnKey()` to retrieve the key corresponding to a value:
+`in()` returns a new `Config` for a nested array. The original instance does not change:
 
 ```php
-$configResolver->returnKey(true)->get('Dave'); // Returns 'name'
-$configResolver->returnKey(false)->get('name'); // Returns 'Dave'
+$person = $config->in('person');
+
+$person->get('name');           // 'Dave'
+$person->path();                // 'person'
+$config->get('person.surname'); // still works: $config is unchanged
 ```
 
-> **Note:** `returnKey()` is a persistent mode. It stays active for every following call (also after `useSetting()`) until you call `returnKey(false)`.
+`in()` throws a `SettingNotFoundException` when the path does not exist or does not point to an array. Use `get()` for scalar values.
 
-> **Tip:** a resolver keeps its selected setting, search and `returnKey()` mode between calls. Avoid sharing one instance between unrelated parts of your code (for example as a singleton in a service container); create a new `ConfigResolver` where you need one, or use `clone`.
+### Reverse Lookup with `keyOf()`
 
-Keys are returned as-is, so a value at index `0` of a list returns `0` (not `null`). `null` is only returned when the value is not found.
-
-### Searching by Field or Value
-
-#### Search by Field
-
-Use `searchBy()` to search for a value by its field:
+`keyOf()` returns the key whose value is exactly (`===`) the given value, or `null`:
 
 ```php
-$configResolver->returnKey(false)->searchBy('name'); // Returns 'Dave'
-$configResolver->searchBy('name'); // Same as above.
+$mapping = Config::from(['userId' => 'UID', 'email' => 'EmailAddress']);
+
+$mapping->keyOf('EmailAddress'); // 'email'
+$mapping->keyOf('Unknown');      // null
 ```
 
-#### Search by Field and Value
+### Finding Rows with `find()`
 
-Provide both the field and the expected value to perform a more specific search:
+`find()` returns the first row (an array at the current level) where a field is exactly the given value, as a new `Config`, or `null`:
 
 ```php
-$configResolver->returnKey(false)->searchBy('name', 'Dave'); // Returns 'Dave'
-$configResolver->returnKey(true)->searchBy('name', 'Dave'); // Returns 'name'
+$options = $config->in('person.options');
+
+$smart = $options->find('skill', 'smart');
+$smart?->get('since'); // 'teenager'
+$smart?->path();       // 'person.options.1'
+
+$options->find('skill', 'lazy');       // null
+$options->findOrFail('skill', 'lazy'); // throws SettingNotFoundException
 ```
 
-When a value is passed, it is compared strictly (`===`), so `false`, `0` and `null` can be searched for as well:
+The field may be a dot-notated path inside the row, e.g. `find('address.city', 'Utrecht')`. Comparisons are strict, so you can also search for `false`, `0` or `null`.
+
+### Sharing an Instance
+
+A `Config` never changes after it has been created, so you can safely register one instance in a service container and use it everywhere:
 
 ```php
-$configResolver->searchBy('active', false); // Matches only when 'active' is exactly false.
-$configResolver->searchBy('parent', null);  // Matches only when 'parent' is exactly null.
+$config->in('settings.field_mapping')->keyOf('EmailAddress'); // 'email'
+$config->in('settings.database')->get('user');                // 'root', regardless of the call above
 ```
-
-Omitting the second argument (instead of passing `null`) searches by field only.
-
-#### Common Pitfall
-
-When using `returnKey(true)` with `searchBy()`, ensure the value is passed as the second parameter:
-
-```php
-$configResolver->returnKey(true)->searchBy('name'); // Returns null because 'name' should have been 'Dave'.
-```
-
-### Working with Multi-Dimensional Arrays
-
-Use `searchBy()` to retrieve values from arrays with multiple dimensions (a list of rows, where every row is an array). First, set the context using `useSetting()`:
-
-```php
-$configResolver->useSetting('person.options'); // Set to a multi-dimensional array
-```
-
-Then search within that context:
-
-```php
-$configResolver->returnKey(true)->searchBy('skill', 'smart'); // Returns the key 'skill'
-$configResolver->returnKey(false)->searchBy('skill', 'smart'); // Returns the value 'smart'
-```
-
-The search stays active after `searchBy()`, so you can use `get()` to read other fields from the first matching row:
-
-```php
-$configResolver->returnKey(false)->searchBy('skill', 'smart');
-$configResolver->get('since'); // Returns 'teenager'
-```
-
-The search is cleared when you call `useSetting()` again or call `searchBy()` without a value.
-
-## Example Use Case
-
-Here’s an example of the complete workflow:
-
-```php
-$configArray = [
-    'settings' => [
-        'database' => [
-            'host' => 'localhost',
-            'user' => 'root',
-            'password' => 'secret',
-        ],
-        'field_mapping' => [
-            'userId' => 'UID',
-            'email' => 'EmailAddress',
-        ],
-    ],
-];
-
-$configResolver = new ConfigResolver($configArray);
-
-// Set context
-$configResolver->useSetting('settings.field_mapping');
-
-// Retrieve value
-$field = $configResolver->get('userId'); // Returns 'UID'
-
-// Search for a key by value
-$key = $configResolver->returnKey(true)->get('EmailAddress'); // Returns 'email'
-
-// Switch to another setting (returnKey is persistent, so turn it off first)
-$configResolver->returnKey(false)->useSetting('settings.database');
-$dbUser = $configResolver->get('user'); // Returns 'root'
-```
-
-## Checking for Missing Values
-
-`get()` and `searchBy()` return `null` when nothing is found. Because a key can also hold `null` as its value, use `has()` to tell the two apart, or `getOrFail()` to throw when nothing is found:
-
-```php
-$configResolver = new ConfigResolver(['map' => ['empty' => null]]);
-$configResolver->useSetting('map');
-
-$configResolver->get('empty');       // null (the value is null)
-$configResolver->get('unknown');     // null (the key is missing)
-
-$configResolver->has('empty');       // true
-$configResolver->has('unknown');     // false
-
-$configResolver->getOrFail('empty');   // null
-$configResolver->getOrFail('unknown'); // throws SettingNotFoundException
-```
-
-`has()` and `getOrFail()` follow the same rules as `get()`: they respect `returnKey()` and an active `searchBy()` search.
-
-Use `get()` when a missing value is a normal case (e.g. an optional field mapping), and `getOrFail()` when a missing value means the configuration is wrong.
 
 ## Error Handling
 
-`useSetting()` and `getOrFail()` throw a `MVDH\ConfigResolver\SettingNotFoundException` when something cannot be found. `useSetting()` also throws when a path tries to go deeper than a non-array value (e.g. `person.name.first`).
-
-`SettingNotFoundException` extends `InvalidArgumentException`, so you can catch either:
+`in()`, `getOrFail()` and `findOrFail()` throw a `MVDH\ConfigResolver\SettingNotFoundException`, which extends `InvalidArgumentException`:
 
 ```php
 use MVDH\ConfigResolver\SettingNotFoundException;
 
 try {
-    $configResolver->useSetting('nonexistent.setting');
+    $config->in('person.unknown');
 } catch (SettingNotFoundException $e) {
-    echo $e->getMessage(); // Outputs: 'The requested setting "nonexistent.setting" is not configured. Available keys: settings'
-}
-
-try {
-    $configResolver->useSetting('settings.database')->getOrFail('port');
-} catch (SettingNotFoundException $e) {
-    echo $e->getMessage(); // Outputs: 'Nothing found for "port" in setting "settings.database".'
+    echo $e->getMessage(); // 'The requested setting "person.unknown" is not configured. Available keys: person'
 }
 ```
+
+## Migrating from ConfigResolver
+
+`ConfigResolver` is deprecated since 1.2.0 and will be removed in 2.0.0. It keeps state between calls, which makes results depend on earlier calls on the same instance. `Config` replaces it:
+
+| `ConfigResolver` (deprecated) | `Config` |
+|---|---|
+| `new ConfigResolver($array)` | `Config::from($array)` |
+| `->useSetting('a.b')` | `->in('a.b')` (returns a new instance) |
+| `->get('field')` | `->get('field')` |
+| `->get()` | `->all()` |
+| `->has('field')` / `->getOrFail('field')` | `->has('field')` / `->getOrFail('field')` |
+| `->returnKey()->get('value')` | `->keyOf('value')` |
+| `->searchBy('field', 'value')` then `->get('other')` | `->find('field', 'value')?->get('other')` |
+| `->returnKey()->searchBy('field', 'value')` on a list of rows | `->find('field', 'value') !== null` |
+| `->searchBy('field', 'value')` on a single array | `->get('field') === 'value'` |
+| `->useSetting('a.scalar')->get()` | `->get('a.scalar')` |
+
+The documentation for `ConfigResolver` is in [docs/legacy-config-resolver.md](https://github.com/mvdhoek1/mvdh-config-resolver/blob/main/docs/legacy-config-resolver.md).
 
 ## Testing
 

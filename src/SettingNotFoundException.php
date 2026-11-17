@@ -34,6 +34,27 @@ class SettingNotFoundException extends InvalidArgumentException
         ));
     }
 
+    public static function notAnArray(string $setting, string $type): self
+    {
+        return new self(sprintf(
+            'The setting "%s" is not an array but %s.',
+            $setting,
+            $type
+        ));
+    }
+
+    public static function forMatch(string $field, mixed $value, string $setting): self
+    {
+        $value = is_scalar($value) || $value === null ? var_export($value, true) : get_debug_type($value);
+
+        return new self(sprintf(
+            'No row found where "%s" is %s in %s.',
+            $field,
+            $value,
+            $setting === '' ? 'the configuration' : sprintf('setting "%s"', $setting)
+        ));
+    }
+
     public static function forField(string $field, string $setting): self
     {
         if ($setting === '') {
