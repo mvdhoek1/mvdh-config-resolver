@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-use InvalidArgumentException;
-
 class ConfigResolver
 {
 	private array $config; // Array which holds all the data from the config file.
 	private mixed $setting = null; // Setting from the config file to use.
+	private bool $hasSetting = false; // Whether a setting has been selected with useSetting().
 	private string $fieldToMatch = '';
 	private mixed $valueToMatch = null;
+	private bool $hasValueToMatch = false; // Distinguishes searching for null from not searching by value.
 	private bool $returnKey = false;
 
 	public function __construct(array $config)
@@ -19,6 +19,7 @@ class ConfigResolver
 
 	/**
 	 * Sets the specified setting to be used.
+	 * Resets any search parameters set by a previous searchBy() call.
 	 *
 	 * @throws InvalidArgumentException If the wanted setting is not configured.
 	 */
@@ -28,11 +29,11 @@ class ConfigResolver
 		$currentConfig = $this->config;
 
 		foreach ($settings as $key) {
-			if (! array_key_exists($key, $currentConfig)) {
+			if (! is_array($currentConfig) || ! array_key_exists($key, $currentConfig)) {
 				throw new InvalidArgumentException(sprintf(
 					'The requested setting "%s" is not configured. Available keys: %s',
 					$setting,
-					implode(', ', array_keys($currentConfig))
+					is_array($currentConfig) ? implode(', ', array_keys($currentConfig)) : '(none)'
 				));
 			}
 
@@ -40,17 +41,23 @@ class ConfigResolver
 		}
 
 		$this->setting = $currentConfig;
+		$this->hasSetting = true;
+		$this->fieldToMatch = '';
+		$this->valueToMatch = null;
+		$this->hasValueToMatch = false;
 
 		return $this;
 	}
 
 	/**
 	 * Sets the field and value to be used for searching.
+	 * Omit the value to search by field only; pass null explicitly to search for null values.
 	 */
 	public function searchBy(string $field, mixed $value = null): mixed
 	{
 		$this->fieldToMatch = $field;
 		$this->valueToMatch = $value;
+		$this->hasValueToMatch = func_num_args() > 1;
 
 		return $this->get($field);
 	}
@@ -71,19 +78,23 @@ class ConfigResolver
 	 */
 	public function get(string $field = ''): mixed
 	{
-		if (empty($this->setting)) {
+		if (! $this->hasSetting) {
 			return $this->config;
 		}
 
-		if (empty($field)) {
+		if ('' === $field) {
 			return $this->setting;
 		}
 
-		if (empty($this->fieldToMatch) || (null === $this->valueToMatch && false !== $this->valueToMatch)) {
+		if (! is_array($this->setting)) {
+			return null;
+		}
+
+		if ('' === $this->fieldToMatch || ! $this->hasValueToMatch) {
 			return $this->handleWithoutSearchParams($field);
 		}
 
-		if (is_array($this->setting) && array_key_exists(0, $this->setting)) {
+		if ($this->isMultiDimensional($this->setting)) {
 			return $this->handleMultiDimensional($field);
 		}
 
@@ -93,7 +104,7 @@ class ConfigResolver
 	protected function handleWithoutSearchParams(string $field): mixed
 	{
 		if ($this->returnKey) {
-			return array_search($field, $this->setting, true) ?: null;
+			return $this->searchKey($field, $this->setting);
 		}
 
 		return $this->setting[$field] ?? null;
@@ -101,15 +112,15 @@ class ConfigResolver
 
 	protected function handleOneDimensional(string $field): mixed
 	{
-		if ($this->returnKey) {
-			if (null !== $this->valueToMatch) {
-				return array_search($this->valueToMatch, $this->setting, true) ?: null;
-			}
-
-			return array_search($field, $this->setting, true) ?: null;
+		if (! array_key_exists($this->fieldToMatch, $this->setting) || $this->setting[$this->fieldToMatch] !== $this->valueToMatch) {
+			return null;
 		}
 
-		return ($this->setting[$field] ?? null) === $this->valueToMatch ? $this->setting[$field] : null;
+		if ($this->returnKey) {
+			return $this->fieldToMatch;
+		}
+
+		return $this->setting[$field] ?? null;
 	}
 
 	/**
@@ -118,17 +129,45 @@ class ConfigResolver
 	protected function handleMultiDimensional(string $field): mixed
 	{
 		foreach ($this->setting as $setting) {
-			if (($setting[$this->fieldToMatch] ?? null) !== $this->valueToMatch) {
+			if (! is_array($setting) || ! array_key_exists($this->fieldToMatch, $setting) || $setting[$this->fieldToMatch] !== $this->valueToMatch) {
 				continue;
 			}
 
 			if ($this->returnKey) {
-				return array_search($this->valueToMatch, $setting, true) ?: null;
+				return $this->fieldToMatch;
 			}
 
 			return $setting[$field] ?? null;
 		}
 
 		return null;
+	}
+
+	/**
+	 * A setting is multi-dimensional when it is a non-empty list of arrays (rows).
+	 */
+	private function isMultiDimensional(array $setting): bool
+	{
+		if ([] === $setting) {
+			return false;
+		}
+
+		foreach ($setting as $row) {
+			if (! is_array($row)) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Returns the key of the given value, or null when not found. Preserves falsy keys such as 0.
+	 */
+	private function searchKey(mixed $value, array $haystack): int|string|null
+	{
+		$key = array_search($value, $haystack, true);
+
+		return false === $key ? null : $key;
 	}
 }

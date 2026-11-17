@@ -42,17 +42,19 @@ $configResolver = new ConfigResolver($configArray);
 
 ### Setting the Configuration Context
 
-Use useSetting() to specify which part of the configuration to work with:
+Use `useSetting()` to specify which part of the configuration to work with. Nested keys are separated by dots:
 
 ```php
 $configResolver->useSetting('person');
 ```
 
-This sets the configuration context to the person key.
+This sets the configuration context to the `person` key. Calling `useSetting()` also clears any search parameters set by a previous `searchBy()` call.
+
+Until `useSetting()` has been called, `get()` returns the entire configuration array.
 
 ### Simple Retrieval
 
-Retrieve a value from the current context using get():
+Retrieve a value from the current context using `get()`. Unknown fields return `null`:
 
 ```php
 $configResolver->get('name'); // Returns 'Dave'
@@ -66,18 +68,22 @@ $configResolver->get(); // Returns the array for 'person'
 
 ### Returning Keys Instead of Values
 
-Use returnKey() to retrieve the key corresponding to a value:
+Use `returnKey()` to retrieve the key corresponding to a value:
 
 ```php
 $configResolver->returnKey(true)->get('Dave'); // Returns 'name'
 $configResolver->returnKey(false)->get('name'); // Returns 'Dave'
 ```
 
+> **Note:** `returnKey()` is a persistent mode. It stays active for every following call (also after `useSetting()`) until you call `returnKey(false)`.
+
+Keys are returned as-is, so a value at index `0` of a list returns `0` (not `null`). `null` is only returned when the value is not found.
+
 ### Searching by Field or Value
 
 #### Search by Field
 
-Use searchBy() to search for a value by its field:
+Use `searchBy()` to search for a value by its field:
 
 ```php
 $configResolver->returnKey(false)->searchBy('name'); // Returns 'Dave'
@@ -93,9 +99,18 @@ $configResolver->returnKey(false)->searchBy('name', 'Dave'); // Returns 'Dave'
 $configResolver->returnKey(true)->searchBy('name', 'Dave'); // Returns 'name'
 ```
 
+When a value is passed, it is compared strictly (`===`), so `false`, `0` and `null` can be searched for as well:
+
+```php
+$configResolver->searchBy('active', false); // Matches only when 'active' is exactly false.
+$configResolver->searchBy('parent', null);  // Matches only when 'parent' is exactly null.
+```
+
+Omitting the second argument (instead of passing `null`) searches by field only.
+
 #### Common Pitfall
 
-When using returnKey(true) with searchBy(), ensure the value is passed as the second parameter:
+When using `returnKey(true)` with `searchBy()`, ensure the value is passed as the second parameter:
 
 ```php
 $configResolver->returnKey(true)->searchBy('name'); // Returns null because 'name' should have been 'Dave'.
@@ -103,7 +118,7 @@ $configResolver->returnKey(true)->searchBy('name'); // Returns null because 'nam
 
 ### Working with Multi-Dimensional Arrays
 
-Use searchBy() to retrieve values from arrays with multiple dimensions. First, set the context using useSetting():
+Use `searchBy()` to retrieve values from arrays with multiple dimensions (a list of rows, where every row is an array). First, set the context using `useSetting()`:
 
 ```php
 $configResolver->useSetting('person.options'); // Set to a multi-dimensional array
@@ -115,6 +130,15 @@ Then search within that context:
 $configResolver->returnKey(true)->searchBy('skill', 'smart'); // Returns the key 'skill'
 $configResolver->returnKey(false)->searchBy('skill', 'smart'); // Returns the value 'smart'
 ```
+
+The search stays active after `searchBy()`, so you can use `get()` to read other fields from the first matching row:
+
+```php
+$configResolver->returnKey(false)->searchBy('skill', 'smart');
+$configResolver->get('since'); // Returns 'teenager'
+```
+
+The search is cleared when you call `useSetting()` again or call `searchBy()` without a value.
 
 ## Example Use Case
 
@@ -146,19 +170,19 @@ $field = $configResolver->get('userId'); // Returns 'UID'
 // Search for a key by value
 $key = $configResolver->returnKey(true)->get('EmailAddress'); // Returns 'email'
 
-// Use multi-dimensional arrays
-$configResolver->useSetting('settings.database');
+// Switch to another setting (returnKey is persistent, so turn it off first)
+$configResolver->returnKey(false)->useSetting('settings.database');
 $dbUser = $configResolver->get('user'); // Returns 'root'
 ```
 
 ## Error Handling
 
-The ConfigResolver class throws an InvalidArgumentException if a requested setting does not exist:
+The `ConfigResolver` class throws an `InvalidArgumentException` if a requested setting does not exist, including when a path tries to go deeper than a non-array value (e.g. `person.name.first`):
 
 ```php
 try {
     $configResolver->useSetting('nonexistent.setting');
 } catch (InvalidArgumentException $e) {
-    echo $e->getMessage(); // Outputs: 'Wanted setting is not configured.'
+    echo $e->getMessage(); // Outputs: 'The requested setting "nonexistent.setting" is not configured. Available keys: settings'
 }
 ```
