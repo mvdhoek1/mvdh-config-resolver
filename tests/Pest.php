@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use MVDH\ConfigResolver\ConfigResolver;
 
 /*
 |--------------------------------------------------------------------------
@@ -25,9 +26,9 @@ function personConfig(): array
 /**
  * Creates a resolver for the person fixture, optionally with a setting selected.
  */
-function resolver(?string $setting = null): MVDH\ConfigResolver\ConfigResolver
+function resolver(?string $setting = null): ConfigResolver
 {
-    $resolver = new MVDH\ConfigResolver\ConfigResolver(personConfig());
+    $resolver = new ConfigResolver(personConfig());
 
-    return null === $setting ? $resolver : $resolver->useSetting($setting);
+    return $setting === null ? $resolver : $resolver->useSetting($setting);
 }

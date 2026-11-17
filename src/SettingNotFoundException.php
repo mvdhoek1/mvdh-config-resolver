@@ -12,21 +12,21 @@ use InvalidArgumentException;
  */
 class SettingNotFoundException extends InvalidArgumentException
 {
-	public static function forSetting(string $setting, array $availableKeys): self
-	{
-		return new self(sprintf(
-			'The requested setting "%s" is not configured. Available keys: %s',
-			$setting,
-			[] === $availableKeys ? '(none)' : implode(', ', $availableKeys)
-		));
-	}
+    public static function forSetting(string $setting, array $availableKeys): self
+    {
+        return new self(sprintf(
+            'The requested setting "%s" is not configured. Available keys: %s',
+            $setting,
+            $availableKeys === [] ? '(none)' : implode(', ', $availableKeys)
+        ));
+    }
 
-	public static function forField(string $field, string $setting): self
-	{
-		return new self(sprintf(
-			'Nothing found for "%s" in setting "%s".',
-			$field,
-			$setting
-		));
-	}
+    public static function forField(string $field, string $setting): self
+    {
+        return new self(sprintf(
+            'Nothing found for "%s" in setting "%s".',
+            $field,
+            $setting
+        ));
+    }
 }

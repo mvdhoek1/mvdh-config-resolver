@@ -245,3 +245,12 @@ Useful options:
 ./vendor/bin/pest --filter=getOrFail   # run matching tests only
 ./vendor/bin/pest --coverage           # coverage report (requires Xdebug or PCOV)
 ```
+
+## Code Style
+
+Code is formatted with [Laravel Pint](https://laravel.com/docs/pint) using the `laravel` preset (see `pint.json`):
+
+```bash
+composer format        # fix code style
+composer format:check  # only report issues (e.g. in CI)
+```
