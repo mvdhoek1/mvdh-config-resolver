@@ -1,9 +1,24 @@
 <?php
 
+/**
+ * Resolve and search values in nested configuration arrays.
+ *
+ * @author  Mike van den Hoek
+ * @license GPL-3.0-or-later
+ *
+ * @link    https://github.com/mvdhoek1/mvdh-config-resolver
+ * @since   1.0.0
+ */
+
 declare(strict_types=1);
 
 namespace MVDH\ConfigResolver;
 
+/**
+ * Fluent resolver for reading, searching and reverse-looking-up values in a configuration array.
+ *
+ * @since 1.0.0
+ */
 class ConfigResolver
 {
     private array $config; // Array which holds all the data from the config file.
