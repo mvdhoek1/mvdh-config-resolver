@@ -10,7 +10,25 @@ describe('useSetting', function () {
         $resolver = resolver();
 
         expect($resolver->get())->toBe(personConfig());
-        expect($resolver->get('person'))->toBe(personConfig());
+    });
+
+    it('looks up fields in the top level when no setting is selected', function () {
+        $resolver = resolver();
+
+        expect($resolver->get('person'))->toBe(personConfig()['person']);
+        expect($resolver->get('unknown'))->toBeNull();
+        expect($resolver->has('person'))->toBeTrue();
+        expect($resolver->has('unknown'))->toBeFalse();
+    });
+
+    it('throws from getOrFail() when no setting is selected and the field is missing', function () {
+        resolver()->getOrFail('unknown');
+    })->throws(SettingNotFoundException::class, 'Nothing found for "unknown" in the configuration.');
+
+    it('supports returnKey() when no setting is selected', function () {
+        $resolver = new ConfigResolver(['a' => 'x', 'b' => 'y']);
+
+        expect($resolver->returnKey()->get('y'))->toBe('b');
     });
 
     it('selects a nested setting using dot notation', function () {

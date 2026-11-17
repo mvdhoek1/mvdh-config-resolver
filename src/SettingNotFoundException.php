@@ -22,6 +22,9 @@ use InvalidArgumentException;
  */
 class SettingNotFoundException extends InvalidArgumentException
 {
+    /**
+     * @param  list<string>  $availableKeys
+     */
     public static function forSetting(string $setting, array $availableKeys): self
     {
         return new self(sprintf(
@@ -33,6 +36,10 @@ class SettingNotFoundException extends InvalidArgumentException
 
     public static function forField(string $field, string $setting): self
     {
+        if ($setting === '') {
+            return new self(sprintf('Nothing found for "%s" in the configuration.', $field));
+        }
+
         return new self(sprintf(
             'Nothing found for "%s" in setting "%s".',
             $field,

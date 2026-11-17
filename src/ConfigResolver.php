@@ -21,13 +21,12 @@ namespace MVDH\ConfigResolver;
  */
 class ConfigResolver
 {
+    /** @var array<array-key, mixed> */
     private array $config; // Array which holds all the data from the config file.
 
     private mixed $setting = null; // Setting from the config file to use.
 
     private string $settingPath = ''; // Dot-notated path of the selected setting.
-
-    private bool $hasSetting = false; // Whether a setting has been selected with useSetting().
 
     private string $fieldToMatch = '';
 
@@ -37,9 +36,13 @@ class ConfigResolver
 
     private bool $returnKey = false;
 
+    /**
+     * @param  array<array-key, mixed>  $config
+     */
     public function __construct(array $config)
     {
         $this->config = $config;
+        $this->setting = $config; // Until useSetting() is called, lookups run against the top level.
     }
 
     /**
@@ -66,7 +69,6 @@ class ConfigResolver
 
         $this->setting = $currentConfig;
         $this->settingPath = $setting;
-        $this->hasSetting = true;
         $this->fieldToMatch = '';
         $this->valueToMatch = null;
         $this->hasValueToMatch = false;
@@ -99,7 +101,8 @@ class ConfigResolver
 
     /**
      * Retrieves the value of the specified key inside an array.
-     * If no setting or key is specified the entire configuration will be returned.
+     * Without useSetting(), the field is looked up in the top level of the configuration.
+     * Without a field, the selected setting (or the entire configuration) is returned.
      * Returns null when nothing is found; use has() or getOrFail() to tell a missing key from a null value.
      */
     public function get(string $field = ''): mixed
@@ -137,10 +140,6 @@ class ConfigResolver
      */
     private function resolve(string $field): array
     {
-        if (! $this->hasSetting) {
-            return [true, $this->config];
-        }
-
         if ($field === '') {
             return [true, $this->setting];
         }
@@ -166,12 +165,12 @@ class ConfigResolver
     protected function handleWithoutSearchParams(string $field): array
     {
         if ($this->returnKey) {
-            $key = array_search($field, $this->setting, true);
+            $key = array_search($field, $this->settingAsArray(), true);
 
             return $key === false ? [false, null] : [true, $key];
         }
 
-        return $this->lookup($field, $this->setting);
+        return $this->lookup($field, $this->settingAsArray());
     }
 
     /**
@@ -187,7 +186,7 @@ class ConfigResolver
             return [true, $this->fieldToMatch];
         }
 
-        return $this->lookup($field, $this->setting);
+        return $this->lookup($field, $this->settingAsArray());
     }
 
     /**
@@ -197,7 +196,7 @@ class ConfigResolver
      */
     protected function handleMultiDimensional(string $field): array
     {
-        foreach ($this->setting as $row) {
+        foreach ($this->settingAsArray() as $row) {
             if (! $this->matches($row)) {
                 continue;
             }
@@ -212,6 +211,9 @@ class ConfigResolver
         return [false, null];
     }
 
+    /**
+     * @phpstan-assert-if-true array<array-key, mixed> $row
+     */
     private function matches(mixed $row): bool
     {
         return is_array($row)
@@ -220,6 +222,17 @@ class ConfigResolver
     }
 
     /**
+     * The selected setting as an array; resolve() only calls the handlers when it is one.
+     *
+     * @return array<array-key, mixed>
+     */
+    private function settingAsArray(): array
+    {
+        return is_array($this->setting) ? $this->setting : [];
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $haystack
      * @return array{0: bool, 1: mixed}
      */
     private function lookup(string $field, array $haystack): array
@@ -229,6 +242,8 @@ class ConfigResolver
 
     /**
      * A setting is multi-dimensional when it is a non-empty list of arrays (rows).
+     *
+     * @param  array<array-key, mixed>  $setting
      */
     private function isMultiDimensional(array $setting): bool
     {

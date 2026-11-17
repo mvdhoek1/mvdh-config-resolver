@@ -2,13 +2,32 @@
     "name": "mvdh/config-resolver",
     "description": "Utility to resolve and search values in nested configuration arrays.",
     "type": "library",
+    "keywords": [
+        "config",
+        "configuration",
+        "array",
+        "dot-notation",
+        "resolver",
+        "mapping"
+    ],
     "license": "GPL-3.0-or-later",
+    "authors": [
+        {
+            "name": "Mike van den Hoek",
+            "homepage": "https://github.com/mvdhoek1"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/mvdhoek1/mvdh-config-resolver/issues",
+        "source": "https://github.com/mvdhoek1/mvdh-config-resolver"
+    },
     "require": {
-        "php": "^8.0"
+        "php": "^8.2"
     },
     "require-dev": {
-        "laravel/pint": "^1.32",
-        "pestphp/pest": "^2.0 || ^3.0"
+        "laravel/pint": "^1.13",
+        "pestphp/pest": "^2.0 || ^3.0",
+        "phpstan/phpstan": "^2.1"
     },
     "autoload": {
         "psr-4": {
@@ -18,7 +37,13 @@
     "scripts": {
         "test": "pest",
         "format": "pint",
-        "format:check": "pint --test"
+        "format:check": "pint --test",
+        "analyse": "phpstan analyse --no-progress",
+        "check": [
+            "@format:check",
+            "@analyse",
+            "@test"
+        ]
     },
     "config": {
         "sort-packages": true,

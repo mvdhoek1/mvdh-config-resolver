@@ -1,4 +1,9 @@
-# Documentation
+# Config Resolver
+
+[![CI](https://github.com/mvdhoek1/mvdh-config-resolver/actions/workflows/ci.yml/badge.svg)](https://github.com/mvdhoek1/mvdh-config-resolver/actions/workflows/ci.yml)
+[![Latest Version](https://img.shields.io/packagist/v/mvdh/config-resolver.svg)](https://packagist.org/packages/mvdh/config-resolver)
+[![PHP Version](https://img.shields.io/packagist/dependency-v/mvdh/config-resolver/php.svg)](https://packagist.org/packages/mvdh/config-resolver)
+[![License](https://img.shields.io/packagist/l/mvdh/config-resolver.svg)](LICENSE)
 
 The `ConfigResolver` class is a utility designed to simplify the management and retrieval of configuration settings from a nested configuration array. It provides intuitive methods to set specific settings, search by fields or values, and retrieve values or keys.
 
@@ -20,7 +25,7 @@ The `ConfigResolver` class is a utility designed to simplify the management and 
 composer require mvdh/config-resolver
 ```
 
-Requires PHP 8.0 or higher.
+Requires PHP 8.2 or higher. The package has no runtime dependencies.
 
 ## How to Use
 
@@ -61,7 +66,9 @@ $configResolver->useSetting('person');
 
 This sets the configuration context to the `person` key. Calling `useSetting()` also clears any search parameters set by a previous `searchBy()` call.
 
-Until `useSetting()` has been called, `get()` returns the entire configuration array.
+Until `useSetting()` has been called, lookups run against the top level of the configuration: `get('person')` returns the `person` array and `get()` returns the entire configuration.
+
+Keys that contain a dot (e.g. `'app.name' => '...'`) cannot be selected with `useSetting()`, because the dot is always read as a separator. Select their parent and use `get('app.name')` instead.
 
 ### Simple Retrieval
 
@@ -87,6 +94,8 @@ $configResolver->returnKey(false)->get('name'); // Returns 'Dave'
 ```
 
 > **Note:** `returnKey()` is a persistent mode. It stays active for every following call (also after `useSetting()`) until you call `returnKey(false)`.
+
+> **Tip:** a resolver keeps its selected setting, search and `returnKey()` mode between calls. Avoid sharing one instance between unrelated parts of your code (for example as a singleton in a service container); create a new `ConfigResolver` where you need one, or use `clone`.
 
 Keys are returned as-is, so a value at index `0` of a list returns `0` (not `null`). `null` is only returned when the value is not found.
 
@@ -254,3 +263,23 @@ Code is formatted with [Laravel Pint](https://laravel.com/docs/pint) using the `
 composer format        # fix code style
 composer format:check  # only report issues (e.g. in CI)
 ```
+
+## Static Analysis
+
+The code is checked with [PHPStan](https://phpstan.org) at the highest level (see `phpstan.neon.dist`):
+
+```bash
+composer analyse
+```
+
+## Running All Checks
+
+```bash
+composer check   # code style, static analysis and tests
+```
+
+GitHub Actions runs the same checks on every push and pull request, with the tests on PHP 8.2 to 8.5.
+
+## License
+
+GPL-3.0-or-later. See [LICENSE](LICENSE).
