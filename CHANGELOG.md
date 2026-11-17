@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-17
+
+### Changed
+
+- **Breaking for PHP 8.0/8.1 users:** the minimum PHP version is now 8.2. PHP 8.0 and 8.1 are end-of-life, and the test tooling no longer installs on them.
+
+### Fixed
+
+- Before `useSetting()` is called, `get($field)` now returns that top-level field instead of the entire configuration. `has()` and `getOrFail()` now work there as well instead of always reporting a match.
+- `getOrFail()` without a selected setting gives a clear message ("in the configuration") instead of an empty setting name.
+
+### Added
+
+- PHPStan at the highest level (`composer analyse`).
+- `composer check` to run code style, static analysis and tests together.
+- GitHub Actions CI: code style and static analysis, plus tests on PHP 8.2–8.5 and with the lowest dependency versions.
+- `.gitattributes` so tests and tooling are not included in the installed package.
+- Package keywords, author and support links in `composer.json`.
+- README notes on shared resolver state and on keys that contain a dot.
+
 ## [1.0.0] - 2026-11-17
 
 First release as a Composer package.
@@ -39,5 +59,6 @@ First release as a Composer package.
 - `TypeError` when a setting path goes through a non-array value, or when calling `get()` on a scalar setting.
 - Incorrect exception message and misleading examples in the README.
 
-[Unreleased]: https://github.com/mvdhoek1/mvdh-config-resolver/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/mvdhoek1/mvdh-config-resolver/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/mvdhoek1/mvdh-config-resolver/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/mvdhoek1/mvdh-config-resolver/releases/tag/v1.0.0
